@@ -1,22 +1,23 @@
 import pino from "pino";
 
-// Konfigurasi untuk development, agar log mudah dibaca
-const transport = pino.transport({
-  target: "pino-pretty",
-  options: { colorize: true },
-});
+const isProduction = process.env.VERCEL_ENV === "production";
 
-// Gunakan transport saat bukan di lingkungan produksi
+const transport = isProduction
+  ? undefined
+  : pino.transport({
+      target: "pino-pretty",
+      options: { colorize: true },
+    });
+
 const logger = pino(
   {
-    level: "info", // Level log minimum yang akan ditampilkan
+    level: "info",
     base: {
-      pid: false, // Tidak perlu menampilkan process id
+      pid: false,
     },
     timestamp: () => `,"time":"${new Date().toISOString()}"`,
   },
-  // Hanya gunakan 'pino-pretty' saat development
-  process.env.NODE_ENV !== "production" ? transport : undefined
+  transport
 );
 
 export default logger;

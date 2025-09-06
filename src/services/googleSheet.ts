@@ -1,5 +1,3 @@
-// src/services/googleSheet.ts
-
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import logger from "../logger";
@@ -12,18 +10,12 @@ export interface TransactionRow {
   description: string;
 }
 
-/**
- * Membuat file Spreadsheet baru untuk pengguna.
- */
 export async function createSpreadsheet(
   auth: OAuth2Client,
   title: string
 ): Promise<string | null | undefined> {
   const sheets = google.sheets({ version: "v4", auth });
   try {
-    // ==========================================================
-    // PERBAIKAN 1: Gunakan 'requestBody'
-    // ==========================================================
     const spreadsheet = await sheets.spreadsheets.create({
       requestBody: {
         properties: { title },
@@ -68,16 +60,12 @@ export async function appendTransaction(
         `Sheet "${sheetName}" tidak ditemukan, membuat sheet baru...`
       );
 
-      // ==========================================================
-      // PERBAIKAN 2: Tambahkan 'await' di sini
-      // ==========================================================
       const addSheetResponse = await sheets.spreadsheets.batchUpdate({
         spreadsheetId,
         requestBody: {
           requests: [{ addSheet: { properties: { title: sheetName } } }],
         },
       });
-      // ==========================================================
 
       const newSheetId =
         addSheetResponse.data.replies?.[0]?.addSheet?.properties?.sheetId;

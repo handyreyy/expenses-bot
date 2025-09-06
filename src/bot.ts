@@ -1,5 +1,3 @@
-// src/bot.ts
-
 import { formatInTimeZone } from "date-fns-tz";
 import { Markup, Telegraf } from "telegraf";
 import logger from "./logger";
@@ -23,7 +21,6 @@ Bot sudah terhubung dengan akun Google Anda dan siap digunakan.
 
 Pilih salah satu tombol di bawah untuk memulai, atau ketik perintah secara manual.`;
 
-// Middleware untuk logging
 bot.use(async (ctx, next) => {
   if (ctx.message && "text" in ctx.message) {
     logger.info(
@@ -38,14 +35,12 @@ bot.use(async (ctx, next) => {
   await next();
 });
 
-// Regex untuk semua command biar anti-prefix
 const startHelpRegex = /^(?:@\w+\s+)?\/(start|help)(?:@\w+)?\s*$/;
 const totalRegex = /^(?:@\w+\s+)?\/total(?:@\w+)?\s*$/;
 const laporanRegex = /^(?:@\w+\s+)?\/laporan(?:@\w+)?\s*$/;
 const pemasukanRegex = /^(?:@\w+\s+)?\/pemasukan(?:@\w+)?\s*(.*)/s;
 const catatRegex = /^(?:@\w+\s+)?\/catat(?:@\w+)?\s*(.*)/s;
 
-// Handler untuk /start dan /help
 bot.hears(startHelpRegex, async (ctx) => {
   const telegramId = ctx.from!.id;
   const userData = await getUserData(telegramId);
@@ -75,7 +70,6 @@ bot.hears(startHelpRegex, async (ctx) => {
   }
 });
 
-// Handler untuk /total
 bot.hears(totalRegex, async (ctx) => {
   const telegramId = ctx.from!.id;
   const authClient = await getAuthenticatedClient(telegramId);
@@ -106,7 +100,6 @@ bot.hears(totalRegex, async (ctx) => {
   }
 });
 
-// Handler untuk /laporan
 bot.hears(laporanRegex, async (ctx) => {
   const telegramId = ctx.from!.id;
   const userData = await getUserData(telegramId);
@@ -120,7 +113,6 @@ bot.hears(laporanRegex, async (ctx) => {
   ctx.replyWithMarkdown(replyMessage);
 });
 
-// Handler untuk /pemasukan
 bot.hears(pemasukanRegex, async (ctx) => {
   const telegramId = ctx.from!.id;
   const authClient = await getAuthenticatedClient(telegramId);
@@ -180,7 +172,6 @@ bot.hears(pemasukanRegex, async (ctx) => {
   }
 });
 
-// Handler untuk /catat
 bot.hears(catatRegex, async (ctx) => {
   const telegramId = ctx.from!.id;
   const authClient = await getAuthenticatedClient(telegramId);
@@ -252,13 +243,8 @@ bot.hears(catatRegex, async (ctx) => {
   }
 });
 
-// ==========================================================
-// INI YANG DIUBAH: JAWABAN BUAT SEMUA TEKS YANG GAK DIKENAL
-// ==========================================================
 bot.on("text", (ctx) => {
-  // Gak perlu 'if' lagi. Kalo sampe sini, udah pasti gak dikenal.
   ctx.reply("Perintah tidak dikenal. Ketik /help buat liat daftar perintah.");
 });
-// ==========================================================
 
 export { bot };

@@ -1,12 +1,9 @@
-// src/services/googleAuth.ts
-
 import fs from "fs";
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import path from "path";
 import logger from "../logger";
 
-// --- KONEKSI KE FIREBASE PAKE KUNCI ADMIN ---
 import * as admin from "firebase-admin";
 const serviceAccount = require("../../firebase-service-account.json");
 
@@ -15,7 +12,6 @@ admin.initializeApp({
 });
 
 const db = admin.firestore();
-// ---------------------------------------------
 
 let credentials;
 const credentialsPath = path.join(__dirname, "..", "..", "credentials.json");
@@ -63,7 +59,6 @@ export async function getTokensFromCode(code: string): Promise<any> {
   return tokens;
 }
 
-// --- FUNGSI BARU DENGAN FIREBASE ADMIN SDK ---
 export async function saveUserData(
   telegramId: number,
   data: { spreadsheetId: string; tokens: any }
@@ -85,7 +80,6 @@ export async function getUserData(
     return null;
   }
 }
-// -------------------------------------
 
 export async function getAuthenticatedClient(
   telegramId: number
