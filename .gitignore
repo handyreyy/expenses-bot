@@ -1,3 +1,9 @@
 node_modules
 credentials.json
+firebase-service-account.json
+dist
+
 .env
+.DS_Store
+.vscode
+.idea

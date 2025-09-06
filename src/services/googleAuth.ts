@@ -6,27 +6,16 @@ import { google } from "googleapis";
 import path from "path";
 import logger from "../logger";
 
-// --- KONEKSI KE FIREBASE ---
-import { initializeApp } from "firebase/app";
-// TAMBAHIN 'setLogLevel' DI SINI
-import {
-  doc,
-  getDoc,
-  getFirestore,
-  setDoc,
-  setLogLevel,
-} from "firebase/firestore";
+// --- KONEKSI KE FIREBASE PAKE KUNCI ADMIN ---
+import * as admin from "firebase-admin";
+const serviceAccount = require("../../firebase-service-account.json");
 
-const firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG!);
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
-// ==========================================================
-// TAMBAHIN INI BUAT NYURUH FIREBASE DIEM
-// ==========================================================
-// Cuma tampilin log kalo ada error beneran
-setLogLevel("error");
-// ==========================================================
+const db = admin.firestore();
+// ---------------------------------------------
 
 let credentials;
 const credentialsPath = path.join(__dirname, "..", "..", "credentials.json");
@@ -74,23 +63,23 @@ export async function getTokensFromCode(code: string): Promise<any> {
   return tokens;
 }
 
-// --- FUNGSI BARU DENGAN FIRESTORE ---
+// --- FUNGSI BARU DENGAN FIREBASE ADMIN SDK ---
 export async function saveUserData(
   telegramId: number,
   data: { spreadsheetId: string; tokens: any }
 ) {
-  const userRef = doc(db, "users", String(telegramId));
-  await setDoc(userRef, data, { merge: true });
+  const userRef = db.collection("users").doc(String(telegramId));
+  await userRef.set(data, { merge: true });
   logger.info({ user_id: telegramId }, "User data saved to Firestore.");
 }
 
 export async function getUserData(
   telegramId: number
 ): Promise<{ spreadsheetId: string; tokens: any } | null> {
-  const userRef = doc(db, "users", String(telegramId));
-  const docSnap = await getDoc(userRef);
+  const userRef = db.collection("users").doc(String(telegramId));
+  const docSnap = await userRef.get();
 
-  if (docSnap.exists()) {
+  if (docSnap.exists) {
     return docSnap.data() as { spreadsheetId: string; tokens: any };
   } else {
     return null;
