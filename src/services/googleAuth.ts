@@ -6,34 +6,42 @@ import { google } from "googleapis";
 import path from "path";
 import logger from "../logger";
 
-// --- KONEKSI KE FIREBASE PAKE KUNCI ADMIN ---
+// --- KONEKSI KE FIREBASE PAKE KUNCI ADMIN DARI BRANKAS VERCEL ---
 import * as admin from "firebase-admin";
 
 // ==========================================================
-// PERBAIKAN UTAMA: CARA BACA FILE ANTI-GAGAL DI VERCEL
+// PERBAIKAN UTAMA: BACA KUNCI DARI ENVIRONMENT VARIABLE
 // ==========================================================
-function loadJsonFile(fileName: string) {
-  // process.cwd() adalah cara paling aman buat nemuin root folder di Vercel
-  const filePath = path.join(process.cwd(), fileName);
-  try {
-    const rawData = fs.readFileSync(filePath, "utf8");
-    return JSON.parse(rawData);
-  } catch (error) {
-    logger.fatal(
-      `FATAL ERROR: Gagal baca file '${fileName}'. Pastikan file-nya ada di root folder dan udah ditambahin di 'includeFiles' dalem vercel.json.`
-    );
-    process.exit(1); // Langsung matiin server kalo file penting gak ada
-  }
+// Cek dulu, kalo gak ada kuncinya, langsung matiin server
+if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  logger.fatal(
+    "FATAL ERROR: Environment variable 'FIREBASE_SERVICE_ACCOUNT_JSON' gak ditemuin. Pastiin lu udah set di Vercel."
+  );
+  process.exit(1);
 }
 
-const serviceAccount = loadJsonFile("firebase-service-account.json");
-const credentials = loadJsonFile("credentials.json");
+// Ubah teks satu baris jadi objek JSON lagi
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 // ==========================================================
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 const db = admin.firestore();
+
+// --- BACA CREDENTIALS.JSON (INI CARANYA MASIH SAMA) ---
+function loadJsonFile(fileName: string) {
+  const filePath = path.join(process.cwd(), fileName);
+  try {
+    const rawData = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(rawData);
+  } catch (error) {
+    logger.fatal(`FATAL ERROR: Gagal baca file '${fileName}'.`);
+    process.exit(1);
+  }
+}
+const credentials = loadJsonFile("credentials.json");
+// -----------------------------------------------------------
 
 if (!credentials || !credentials.web) {
   logger.fatal("FATAL ERROR: File credentials.json salah format!");
@@ -54,6 +62,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
+// ... Sisa file ini biarkan sama persis ...
 export function generateAuthUrl(telegramId: number): string {
   return oauth2Client.generateAuthUrl({
     access_type: "offline",
@@ -68,7 +77,6 @@ export async function getTokensFromCode(code: string): Promise<any> {
   return tokens;
 }
 
-// --- FUNGSI DENGAN FIREBASE ADMIN SDK ---
 export async function saveUserData(
   telegramId: number,
   data: { spreadsheetId: string; tokens: any }

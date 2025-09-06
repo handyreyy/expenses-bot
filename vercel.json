@@ -6,8 +6,7 @@
       "use": "@vercel/node",
       "config": {
         "includeFiles": [
-          "credentials.json",
-          "firebase-service-account.json"
+          "credentials.json"
         ]
       }
     }
