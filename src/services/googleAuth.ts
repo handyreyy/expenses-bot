@@ -1,30 +1,39 @@
+// src/services/googleAuth.ts
+
 import fs from "fs";
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import path from "path";
 import logger from "../logger";
 
+// --- KONEKSI KE FIREBASE PAKE KUNCI ADMIN ---
 import * as admin from "firebase-admin";
-const serviceAccount = require("../../firebase-service-account.json");
+
+// ==========================================================
+// PERBAIKAN UTAMA: CARA BACA FILE ANTI-GAGAL DI VERCEL
+// ==========================================================
+function loadJsonFile(fileName: string) {
+  // process.cwd() adalah cara paling aman buat nemuin root folder di Vercel
+  const filePath = path.join(process.cwd(), fileName);
+  try {
+    const rawData = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(rawData);
+  } catch (error) {
+    logger.fatal(
+      `FATAL ERROR: Gagal baca file '${fileName}'. Pastikan file-nya ada di root folder dan udah ditambahin di 'includeFiles' dalem vercel.json.`
+    );
+    process.exit(1); // Langsung matiin server kalo file penting gak ada
+  }
+}
+
+const serviceAccount = loadJsonFile("firebase-service-account.json");
+const credentials = loadJsonFile("credentials.json");
+// ==========================================================
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
-
 const db = admin.firestore();
-
-let credentials;
-const credentialsPath = path.join(__dirname, "..", "..", "credentials.json");
-
-try {
-  const rawData = fs.readFileSync(credentialsPath, "utf8");
-  credentials = JSON.parse(rawData);
-} catch (error) {
-  logger.fatal(
-    "FATAL ERROR: File 'credentials.json' tidak dapat dibaca atau ditemukan."
-  );
-  process.exit(1);
-}
 
 if (!credentials || !credentials.web) {
   logger.fatal("FATAL ERROR: File credentials.json salah format!");
@@ -59,6 +68,7 @@ export async function getTokensFromCode(code: string): Promise<any> {
   return tokens;
 }
 
+// --- FUNGSI DENGAN FIREBASE ADMIN SDK ---
 export async function saveUserData(
   telegramId: number,
   data: { spreadsheetId: string; tokens: any }
