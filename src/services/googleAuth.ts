@@ -1,8 +1,7 @@
+import * as admin from "firebase-admin";
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import logger from "../logger";
-
-import * as admin from "firebase-admin";
 
 if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   logger.fatal(
@@ -10,13 +9,7 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   );
   process.exit(1);
 }
-
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
-const db = admin.firestore();
 
 if (!process.env.GOOGLE_CREDENTIALS_JSON) {
   logger.fatal(
@@ -26,8 +19,13 @@ if (!process.env.GOOGLE_CREDENTIALS_JSON) {
 }
 const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
 
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+const db = admin.firestore();
+
 if (!credentials || !credentials.web) {
-  logger.fatal("FATAL ERROR: File credentials.json salah format!");
+  logger.fatal("FATAL ERROR: GOOGLE_CREDENTIALS_JSON salah format!");
   process.exit(1);
 }
 

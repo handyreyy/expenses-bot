@@ -1,4 +1,3 @@
-// src/server.ts
 import { config } from "dotenv";
 config();
 
@@ -6,11 +5,13 @@ import express from "express";
 import { google } from "googleapis";
 import { bot } from "./bot";
 import logger from "./logger";
-import { saveUserData } from "./services/googleAuth"; // <-- Cuma butuh ini
-import { createSpreadsheet } from "./services/googleSheet";
 
-// Kita baca credentials di sini biar bisa bikin asisten yang bener
-const credentials = require("../credentials.json");
+import {
+  getAuthenticatedClient,
+  getTokensFromCode,
+  saveUserData,
+} from "./services/googleAuth";
+import { createSpreadsheet } from "./services/googleSheet";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -18,7 +19,6 @@ app.use(express.json());
 
 app.get("/oauth2callback", async (req, res) => {
   const { code, state } = req.query;
-  // Ambil telegramId di awal biar bisa ngirim pesan error
   const telegramId = state ? parseInt(state as string, 10) : null;
 
   if (!code || !telegramId) {
@@ -26,24 +26,14 @@ app.get("/oauth2callback", async (req, res) => {
   }
 
   try {
-    // 1. Bikin asisten baru yang lengkap dengan KTP (credentials)
-    const { client_secret, client_id, redirect_uris } = credentials.web;
-    const authClient = new google.auth.OAuth2(
-      client_id,
-      client_secret,
-      redirect_uris[0]
-    );
-
-    // 2. Suruh asisten ini buat nuker 'code' jadi 'tokens'
-    const { tokens } = await authClient.getToken(code as string);
-
-    // ==========================================================
-    // PERBAIKAN UTAMA: PAKSA ASISTEN BUAT PAKE TOKENNYA
-    // ==========================================================
+    const tokens = await getTokensFromCode(code as string);
+    const authClient = await getAuthenticatedClient(telegramId);
+    if (!authClient) {
+      throw new Error("Gagal bikin authenticated client setelah dapet token.");
+    }
     authClient.setCredentials(tokens);
     // ==========================================================
 
-    // 3. Sekarang asisten ini udah siap kerja
     const spreadsheetId = await createSpreadsheet(
       authClient,
       "Laporan Keuangan (Bot)"
@@ -83,7 +73,6 @@ app.get("/oauth2callback", async (req, res) => {
   } catch (error: any) {
     logger.error(error, "Error during OAuth2 callback");
 
-    // KIRIM PESAN ERROR KE USER DI TELEGRAM
     if (telegramId) {
       await bot.telegram.sendMessage(
         telegramId,
