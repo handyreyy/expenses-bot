@@ -1,18 +1,9 @@
-// src/services/googleAuth.ts
-
-import fs from "fs";
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
-import path from "path";
 import logger from "../logger";
 
-// --- KONEKSI KE FIREBASE PAKE KUNCI ADMIN DARI BRANKAS VERCEL ---
 import * as admin from "firebase-admin";
 
-// ==========================================================
-// PERBAIKAN UTAMA: BACA KUNCI DARI ENVIRONMENT VARIABLE
-// ==========================================================
-// Cek dulu, kalo gak ada kuncinya, langsung matiin server
 if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   logger.fatal(
     "FATAL ERROR: Environment variable 'FIREBASE_SERVICE_ACCOUNT_JSON' gak ditemuin. Pastiin lu udah set di Vercel."
@@ -20,28 +11,20 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
   process.exit(1);
 }
 
-// Ubah teks satu baris jadi objek JSON lagi
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-// ==========================================================
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 const db = admin.firestore();
 
-// --- BACA CREDENTIALS.JSON (INI CARANYA MASIH SAMA) ---
-function loadJsonFile(fileName: string) {
-  const filePath = path.join(process.cwd(), fileName);
-  try {
-    const rawData = fs.readFileSync(filePath, "utf8");
-    return JSON.parse(rawData);
-  } catch (error) {
-    logger.fatal(`FATAL ERROR: Gagal baca file '${fileName}'.`);
-    process.exit(1);
-  }
+if (!process.env.GOOGLE_CREDENTIALS_JSON) {
+  logger.fatal(
+    "FATAL ERROR: Environment variable 'GOOGLE_CREDENTIALS_JSON' gak ditemuin. Pastiin lu udah set di Vercel."
+  );
+  process.exit(1);
 }
-const credentials = loadJsonFile("credentials.json");
-// -----------------------------------------------------------
+const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
 
 if (!credentials || !credentials.web) {
   logger.fatal("FATAL ERROR: File credentials.json salah format!");
@@ -62,7 +45,6 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
-// ... Sisa file ini biarkan sama persis ...
 export function generateAuthUrl(telegramId: number): string {
   return oauth2Client.generateAuthUrl({
     access_type: "offline",
