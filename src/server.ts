@@ -12,7 +12,6 @@ import {
 import { createSpreadsheet } from "./services/googleSheet";
 
 const app = express();
-const port = process.env.PORT || 3000;
 app.use(express.json());
 
 app.get("/oauth2callback", async (req, res) => {
@@ -32,7 +31,6 @@ app.get("/oauth2callback", async (req, res) => {
       authClient,
       "Laporan Keuangan (Bot)"
     );
-
     if (!spreadsheetId) throw new Error("Gagal membuat spreadsheet");
 
     const oauth2 = google.oauth2({ version: "v2", auth: authClient });
@@ -43,43 +41,26 @@ app.get("/oauth2callback", async (req, res) => {
       const drive = google.drive({ version: "v3", auth: authClient });
       await drive.permissions.create({
         fileId: spreadsheetId,
-        requestBody: {
-          role: "writer",
-          type: "user",
-          emailAddress: userEmail,
-        },
+        requestBody: { role: "writer", type: "user", emailAddress: userEmail },
       });
-      logger.info(
-        `Akses editor diberikan ke ${userEmail} untuk sheet ${spreadsheetId}`
-      );
+      logger.info(`Akses editor diberikan ke ${userEmail}`);
     }
 
     await saveUserData(telegramId, { spreadsheetId, tokens });
-
     await bot.telegram.sendMessage(
       telegramId,
-      "✅ Akun Anda berhasil terhubung dan file laporan telah dibuat! Anda sekarang memiliki akses edit. Silakan ketik /start lagi."
+      "✅ Akun Anda berhasil terhubung! Silakan ketik /start lagi."
     );
-
-    res.send(
-      "Otentikasi berhasil! Anda bisa menutup halaman ini dan kembali ke Telegram."
-    );
+    res.send("Otentikasi berhasil! Anda bisa menutup halaman ini.");
   } catch (error: any) {
     logger.error(error, "Error during OAuth2 callback");
-
     if (telegramId) {
       await bot.telegram.sendMessage(
         telegramId,
-        `Gagal terhubung dengan Google. 😞\n\n*Penyebab:* ${error.message}\n\nSilakan coba lagi dengan mengetik /start. Pastikan Anda sudah menghapus akses bot di akun Google Anda sebelum mencoba lagi.`,
-        { parse_mode: "Markdown" }
+        `Gagal terhubung dengan Google. 😞\n\n*Penyebab:* ${error.message}`
       );
     }
-
-    res
-      .status(500)
-      .send(
-        "Terjadi kesalahan saat otentikasi. Silakan cek bot Telegram Anda untuk detail."
-      );
+    res.status(500).send("Terjadi kesalahan. Cek bot Telegram Anda.");
   }
 });
 
@@ -93,10 +74,8 @@ const commands = [
 ];
 
 const secretPath = `/telegraf/${bot.secretPathComponent()}`;
-app.use(bot.webhookCallback(secretPath));
 
-app.listen(port, async () => {
-  logger.info(`Server berjalan di port ${port}`);
+async function setupBot() {
   try {
     await bot.telegram.setMyCommands(commands);
     logger.info("Menu commands berhasil diatur.");
@@ -109,4 +88,10 @@ app.listen(port, async () => {
   } catch (error) {
     logger.error(error, "Gagal mengatur webhook atau mengambil info bot");
   }
-});
+}
+
+setupBot();
+
+app.use(bot.webhookCallback(secretPath));
+
+export default app;
