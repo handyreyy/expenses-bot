@@ -14,6 +14,10 @@ import { createSpreadsheet } from "./services/googleSheet";
 const app = express();
 app.use(express.json());
 
+app.get("/ping", (req, res) => {
+  res.status(200).send("Pong! Server idup!");
+});
+
 app.get("/oauth2callback", async (req, res) => {
   const { code, state } = req.query;
   const telegramId = state ? parseInt(state as string, 10) : null;
