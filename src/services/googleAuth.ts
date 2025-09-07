@@ -43,6 +43,18 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
+export function createNewAuthenticatedClient(code: string) {
+  const authClient = new google.auth.OAuth2(
+    client_id,
+    client_secret,
+    redirect_uris[0]
+  );
+  return authClient.getToken(code).then(({ tokens }) => {
+    authClient.setCredentials(tokens);
+    return { authClient, tokens };
+  });
+}
+
 export function generateAuthUrl(telegramId: number): string {
   return oauth2Client.generateAuthUrl({
     access_type: "offline",

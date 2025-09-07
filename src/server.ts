@@ -5,10 +5,8 @@ import express from "express";
 import { google } from "googleapis";
 import { bot } from "./bot";
 import logger from "./logger";
-
 import {
-  getAuthenticatedClient,
-  getTokensFromCode,
+  createNewAuthenticatedClient,
   saveUserData,
 } from "./services/googleAuth";
 import { createSpreadsheet } from "./services/googleSheet";
@@ -26,13 +24,9 @@ app.get("/oauth2callback", async (req, res) => {
   }
 
   try {
-    const tokens = await getTokensFromCode(code as string);
-    const authClient = await getAuthenticatedClient(telegramId);
-    if (!authClient) {
-      throw new Error("Gagal bikin authenticated client setelah dapet token.");
-    }
-    authClient.setCredentials(tokens);
-    // ==========================================================
+    const { authClient, tokens } = await createNewAuthenticatedClient(
+      code as string
+    );
 
     const spreadsheetId = await createSpreadsheet(
       authClient,
