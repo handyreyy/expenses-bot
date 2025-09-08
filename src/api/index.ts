@@ -1,36 +1,35 @@
+// api/index.ts
 import { config } from "dotenv";
 config();
 
 import express from "express";
 import { google } from "googleapis";
-import { bot } from "./bot";
-import logger from "./logger";
+import { bot } from "../../src/bot"; // perbarui path sesuai struktur kamu
+import logger from "../../src/logger";
 import {
   createNewAuthenticatedClient,
   saveUserData,
-} from "./services/googleAuth";
-import { createSpreadsheet } from "./services/googleSheet";
+} from "../../src/services/googleAuth";
+import { createSpreadsheet } from "../../src/services/googleSheet";
 
 const app = express();
 app.use(express.json());
 
-app.get("/ping", (req, res) => {
-  res.status(200).send("Pong! Server idup!");
-});
+// healthcheck
+app.get("/ping", (_req, res) => res.status(200).send("Pong! Server idup!"));
 
+// NOTE: sekarang callback OAuth di /api/oauth2callback
 app.get("/oauth2callback", async (req, res) => {
   const { code, state } = req.query;
   const telegramId = state ? parseInt(state as string, 10) : null;
 
-  if (!code || !telegramId) {
+  if (!code || !telegramId)
     return res.status(400).send("Missing code or state");
-  }
 
   try {
     const { authClient, tokens } = await createNewAuthenticatedClient(
       code as string
     );
-
     const spreadsheetId = await createSpreadsheet(
       authClient,
       "Laporan Keuangan (Bot)"
@@ -68,6 +67,7 @@ app.get("/oauth2callback", async (req, res) => {
   }
 });
 
+// --- Telegram webhook
 const commands = [
   { command: "start", description: "Hubungkan akun atau lihat bantuan" },
   { command: "help", description: "Tampilkan menu bantuan" },
@@ -82,20 +82,24 @@ const secretPath = `/telegraf/${bot.secretPathComponent()}`;
 async function setupBot() {
   try {
     await bot.telegram.setMyCommands(commands);
-    logger.info("Menu commands berhasil diatur.");
 
-    const webhookUrl = `${process.env.SERVER_URL}${secretPath}`;
+    // PENTING: SERVER_URL HARUS menyertakan '/api' (tanpa trailing slash)
+    // contoh: https://expenses-bot-rho.vercel.app/api
+    const base = process.env.SERVER_URL!;
+    const webhookUrl = `${base}${secretPath}`;
     await bot.telegram.setWebhook(webhookUrl);
+
     const me = await bot.telegram.getMe();
-    logger.info(`Webhook berhasil di-set ke: ${webhookUrl}`);
+    logger.info(`Webhook di-set ke: ${webhookUrl}`);
     logger.info(`Bot berjalan sebagai @${me.username}`);
   } catch (error) {
     logger.error(error, "Gagal mengatur webhook atau mengambil info bot");
   }
 }
-
 setupBot();
 
-app.use(bot.webhookCallback(secretPath));
+// pasang handler webhook di path yang sama
+app.use(secretPath, bot.webhookCallback(secretPath));
 
+// Vercel butuh default export of a handler
 export default app;
