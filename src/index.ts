@@ -16,13 +16,15 @@ import { createSpreadsheet } from "./services/googleSheet";
 const app = express();
 app.use(express.json());
 
-// --- Router dengan prefix /api ---
+// --------------------------------------------------------
+// Router dengan prefix /api (semua endpoint kita di sini)
+// --------------------------------------------------------
 const api = express.Router();
 
-// GET https://<domain>/api/ping
+// --------------- Healthcheck ----------------------------
 api.get("/ping", (_req, res) => res.status(200).send("Pong! Server idup!"));
 
-// GET https://<domain>/api/oauth2callback
+// --------------- OAuth callback -------------------------
 api.get("/oauth2callback", async (req, res) => {
   const { code, state } = req.query;
   const telegramId = state ? parseInt(state as string, 10) : null;
@@ -59,6 +61,7 @@ api.get("/oauth2callback", async (req, res) => {
       telegramId,
       "✅ Akun Anda berhasil terhubung! Silakan ketik /start lagi."
     );
+
     res.send("Otentikasi berhasil! Anda bisa menutup halaman ini.");
   } catch (error: any) {
     logger.error(error, "Error during OAuth2 callback");
@@ -72,7 +75,45 @@ api.get("/oauth2callback", async (req, res) => {
   }
 });
 
-// --- Telegram webhook setup ---
+// --------------------------------------------------------
+// Webhook Telegram: gunakan secret path yang TETAP dari ENV
+// --------------------------------------------------------
+const WEBHOOK_SECRET =
+  process.env.TELEGRAM_WEBHOOK_SECRET || "local-dev-secret";
+const secretPath = `/telegraf/${WEBHOOK_SECRET}`;
+
+// (opsional) endpoint debug untuk memastikan URL webhook yang diharapkan
+api.get("/debug/webhook", (_req, res) => {
+  const base = (process.env.SERVER_URL || "").replace(/\/$/, "");
+  res.json({
+    base,
+    secretPath,
+    expectedWebhookUrl: `${base}${secretPath}`,
+  });
+});
+
+// log setiap hit webhook, lalu teruskan ke telegraf
+api.use(
+  secretPath,
+  (req, _res, next) => {
+    logger.info(
+      { method: req.method, path: req.originalUrl },
+      "Incoming Telegram webhook"
+    );
+    next();
+  },
+  bot.webhookCallback(secretPath)
+);
+
+// --------------------------------------------------------
+// Pasang router /api ke app utama
+// --------------------------------------------------------
+app.use("/api", api);
+
+// --------------------------------------------------------
+// Setup bot: set commands + setWebhook ke URL yang benar
+// (tetap di FILE INI, dipanggil saat function “bangun”)
+// --------------------------------------------------------
 const commands = [
   { command: "start", description: "Hubungkan akun atau lihat bantuan" },
   { command: "help", description: "Tampilkan menu bantuan" },
@@ -82,17 +123,17 @@ const commands = [
   { command: "laporan", description: "Dapatkan link Google Sheet pribadi" },
 ];
 
-const secretPath = `/telegraf/${bot.secretPathComponent()}`;
-
 async function setupBot() {
   try {
     await bot.telegram.setMyCommands(commands);
 
-    // ENV wajib: SERVER_URL = https://<domain-vercel>/api  (tanpa trailing slash)
+    // SERVER_URL harus: https://<domain-vercel>/api (tanpa slash di belakang)
     const base = (process.env.SERVER_URL || "").replace(/\/$/, "");
     const webhookUrl = `${base}${secretPath}`;
 
-    await bot.telegram.setWebhook(webhookUrl);
+    // drop pending updates lama biar bersih
+    await bot.telegram.setWebhook(webhookUrl, { drop_pending_updates: true });
+
     const me = await bot.telegram.getMe();
     logger.info({ webhookUrl }, "Webhook diset");
     logger.info(`Bot berjalan sebagai @${me.username}`);
@@ -102,18 +143,16 @@ async function setupBot() {
 }
 setupBot();
 
-// Pasang handler webhook di /api/telegraf/<secret>
-api.use(secretPath, bot.webhookCallback(secretPath));
-
-// Mount router /api ke app utama
-app.use("/api", api);
-
-// --- Vercel entrypoint (jangan .listen di Vercel) ---
+// --------------------------------------------------------
+// Vercel entrypoint (jangan .listen di Vercel)
+// --------------------------------------------------------
 export default function handler(req: VercelRequest, res: VercelResponse) {
   return (app as any)(req, res);
 }
 
-// Dev lokal opsional
+// --------------------------------------------------------
+// Dev lokal opsional (npm run dev)
+// --------------------------------------------------------
 if (!process.env.VERCEL && require.main === module) {
   const port = process.env.PORT || 3000;
   app.listen(port, () => logger.info(`Dev server on http://localhost:${port}`));
