@@ -1,5 +1,3 @@
-// src/utils/parser.ts
-
 /**
  * Mengubah string angka yang fleksibel (misal: "15rb", "20k", "100.000") menjadi angka.
  * @param amountStr String angka yang akan di-parse.

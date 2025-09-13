@@ -1,4 +1,3 @@
-// src/bot.ts
 import { formatInTimeZone } from "date-fns-tz";
 import { Markup, Telegraf } from "telegraf";
 import logger from "./logger";
@@ -17,12 +16,52 @@ import { parseAmount } from "./utils/parser";
 
 const bot = new Telegraf(process.env.BOT_TOKEN!);
 
-const helpMessage = `👋 *Selamat datang kembali!*
+// ====== HELP TEXTS ======
+const examples = [
+  "• Mulai / bantuan: `/start` atau `/help`",
+  "• Hubungkan ulang Google: `/relink`",
+  "• Catat pemasukan: `/pemasukan 500k gaji bulanan`",
+  "• Catat pengeluaran: `/catat makan 15rb nasi padang`",
+  "• Lihat total bulan ini: `/total`",
+  "• Buka laporan Sheet: `/laporan`",
+].join("\n");
 
-Bot sudah terhubung dengan akun Google Anda dan siap digunakan.
+const helpMessageAuthed = `👋 *Selamat datang kembali!*\n\nBot sudah terhubung dengan Google Anda dan siap dipakai.\n\n*Contoh perintah:*\n${examples}`;
 
-Pilih salah satu tombol di bawah untuk memulai, atau ketik perintah secara manual.`;
+const helpMessageNew = (authUrl: string) =>
+  `👋 *Selamat datang!*\n\nAgar bisa menyimpan data, hubungkan dulu akun Google Anda ya.\n\n` +
+  `1. Ketuk tombol *Hubungkan Akun Google* di bawah.\n` +
+  `2. Izinkan akses (Sheets & Drive).\n` +
+  `3. Setelah sukses, Anda bisa langsung pakai perintah di bawah.\n\n` +
+  `*Contoh perintah:*\n${examples}\n\n` +
+  `Atau ketuk tombol cepat di bawah.`;
 
+const keyboardAuthed = Markup.inlineKeyboard([
+  [
+    Markup.button.switchToCurrentChat("➕ Pengeluaran", "/catat "),
+    Markup.button.switchToCurrentChat("💰 Pemasukan", "/pemasukan "),
+  ],
+  [
+    Markup.button.switchToCurrentChat("📊 Total", "/total"),
+    Markup.button.switchToCurrentChat("📄 Laporan", "/laporan"),
+  ],
+  [Markup.button.switchToCurrentChat("🔁 Relink", "/relink")],
+]);
+
+const keyboardNew = (authUrl: string) =>
+  Markup.inlineKeyboard([
+    [Markup.button.url("🔗 Hubungkan Akun Google", authUrl)],
+    [
+      Markup.button.switchToCurrentChat("➕ Pengeluaran", "/catat "),
+      Markup.button.switchToCurrentChat("💰 Pemasukan", "/pemasukan "),
+    ],
+    [
+      Markup.button.switchToCurrentChat("📊 Total", "/total"),
+      Markup.button.switchToCurrentChat("📄 Laporan", "/laporan"),
+    ],
+  ]);
+
+// ====== LOGGING & ERROR HANDLING ======
 bot.use(async (ctx, next) => {
   if (ctx.message && "text" in ctx.message) {
     logger.info(
@@ -41,20 +80,22 @@ bot.catch((err, ctx) => {
   logger.error({ err: String(err), update: ctx.update }, "Telegraf error");
 });
 
+// ====== REGEX COMMANDS ======
 const startHelpRegex = /^(?:@\w+\s+)?\/(start|help)(?:@\w+)?\s*$/;
 const totalRegex = /^(?:@\w+\s+)?\/total(?:@\w+)?\s*$/;
 const laporanRegex = /^(?:@\w+\s+)?\/laporan(?:@\w+)?\s*$/;
 const pemasukanRegex = /^(?:@\w+\s+)?\/pemasukan(?:@\w+)?\s*(.*)/s;
 const catatRegex = /^(?:@\w+\s+)?\/catat(?:@\w+)?\s*(.*)/s;
-const relinkRegex = /^(?:@\w+\s+)?\/relink(?:@\w+)?\s*$/; // untuk reset auth cepat
+const relinkRegex = /^(?:@\w+\s+)?\/relink(?:@\w+)?\s*$/;
 
+// ====== HANDLERS ======
 bot.hears(relinkRegex, async (ctx) => {
   const id = ctx.from!.id;
   await clearUserData(id);
   const url = generateAuthUrl(id);
   await ctx.reply(
-    "🔁 Silakan hubungkan ulang akun Google Anda.",
-    Markup.inlineKeyboard([Markup.button.url("🔗 Hubungkan Akun Google", url)])
+    "🔁 Data lama dihapus. Silakan hubungkan ulang akun Google Anda.",
+    keyboardNew(url)
   );
 });
 
@@ -63,28 +104,12 @@ bot.hears(startHelpRegex, async (ctx) => {
   const userData = await getUserData(telegramId);
 
   if (userData) {
-    await ctx.replyWithMarkdown(
-      helpMessage,
-      Markup.inlineKeyboard([
-        [
-          Markup.button.switchToCurrentChat("Pengeluaran", "/catat "),
-          Markup.button.switchToCurrentChat("Pemasukan", "/pemasukan "),
-        ],
-        [
-          Markup.button.switchToCurrentChat("Total", "/total"),
-          Markup.button.switchToCurrentChat("Laporan", "/laporan"),
-        ],
-      ])
-    );
+    await ctx.replyWithMarkdown(helpMessageAuthed, keyboardAuthed);
   } else {
+    // user pertama kali / belum link → tampilkan onboarding + tombol connect
     const authUrl = generateAuthUrl(telegramId);
     logger.info({ authUrl }, "Generated OAuth URL");
-    await ctx.reply(
-      "Selamat datang! Untuk memulai, hubungkan akun Google Anda.",
-      Markup.inlineKeyboard([
-        Markup.button.url("🔗 Hubungkan Akun Google", authUrl),
-      ])
-    );
+    await ctx.replyWithMarkdown(helpMessageNew(authUrl), keyboardNew(authUrl));
   }
 });
 
@@ -94,7 +119,8 @@ bot.hears(totalRegex, async (ctx) => {
   const userData = await getUserData(telegramId);
 
   if (!authClient || !userData) {
-    return ctx.reply("Akun Anda belum terhubung. Ketik /start untuk memulai.");
+    const authUrl = generateAuthUrl(telegramId);
+    return ctx.replyWithMarkdown(helpMessageNew(authUrl), keyboardNew(authUrl));
   }
 
   try {
@@ -132,7 +158,8 @@ bot.hears(laporanRegex, async (ctx) => {
   const userData = await getUserData(telegramId);
 
   if (!userData) {
-    return ctx.reply("Akun Anda belum terhubung. Ketik /start untuk memulai.");
+    const authUrl = generateAuthUrl(telegramId);
+    return ctx.replyWithMarkdown(helpMessageNew(authUrl), keyboardNew(authUrl));
   }
 
   const url = `https://docs.google.com/spreadsheets/d/${userData.spreadsheetId}`;
@@ -146,7 +173,8 @@ bot.hears(pemasukanRegex, async (ctx) => {
   const userData = await getUserData(telegramId);
 
   if (!authClient || !userData) {
-    return ctx.reply("Akun Anda belum terhubung. Ketik /start untuk memulai.");
+    const authUrl = generateAuthUrl(telegramId);
+    return ctx.replyWithMarkdown(helpMessageNew(authUrl), keyboardNew(authUrl));
   }
 
   const text = ctx.match[1].trim();
@@ -211,7 +239,8 @@ bot.hears(catatRegex, async (ctx) => {
   const userData = await getUserData(telegramId);
 
   if (!authClient || !userData) {
-    return ctx.reply("Akun Anda belum terhubung. Ketik /start untuk memulai.");
+    const authUrl = generateAuthUrl(telegramId);
+    return ctx.replyWithMarkdown(helpMessageNew(authUrl), keyboardNew(authUrl));
   }
 
   const text = ctx.match[1].trim();
@@ -240,7 +269,7 @@ bot.hears(catatRegex, async (ctx) => {
     if (totalIncome <= 0) {
       return ctx.replyWithMarkdown(
         "⛔️ Anda belum memiliki pemasukan bulan ini.\n\n" +
-          "Silakan catat pemasukan terlebih dahulu dengan perintah:\n`/pemasukan <jumlah> [sumber]`"
+          "Silakan catat pemasukan terlebih dahulu:\n`/pemasukan <jumlah> [sumber]`"
       );
     }
 
@@ -284,7 +313,7 @@ bot.hears(catatRegex, async (ctx) => {
 });
 
 bot.on("text", (ctx) => {
-  ctx.reply("Perintah tidak dikenal. Ketik /help buat liat daftar perintah.");
+  ctx.replyWithMarkdown(helpMessageAuthed, keyboardAuthed);
 });
 
 export { bot };

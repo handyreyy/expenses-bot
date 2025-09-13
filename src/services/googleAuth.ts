@@ -1,4 +1,3 @@
-// src/services/googleAuth.ts
 import * as admin from "firebase-admin";
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
@@ -31,9 +30,8 @@ const { client_secret, client_id } = credentials.web as {
   client_id: string;
 };
 
-// === Redirect URI SELALU dari SERVER_URL (/api) ===
 export function getRedirectUri(): string {
-  const base = (process.env.SERVER_URL || "").replace(/\/$/, ""); // ex: https://.../api
+  const base = (process.env.SERVER_URL || "").replace(/\/$/, "");
   if (!base) {
     logger.fatal(
       "FATAL: SERVER_URL belum di-set. Contoh: https://<domain>/api"
@@ -65,7 +63,7 @@ export async function createNewAuthenticatedClient(code: string): Promise<{
 }
 
 export function generateAuthUrl(telegramId: number): string {
-  const client = newOAuthClient(); // PENTING: jangan reuse instance lama
+  const client = newOAuthClient();
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",

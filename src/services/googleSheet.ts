@@ -1,4 +1,3 @@
-// src/services/googleSheet.ts
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import logger from "../logger";
