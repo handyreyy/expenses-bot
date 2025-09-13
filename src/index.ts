@@ -1,41 +1,45 @@
-// api/index.ts
+// src/index.ts
 import { config } from "dotenv";
 config();
 
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import express from "express";
 import { google } from "googleapis";
-import { bot } from "../../src/bot"; // perbarui path sesuai struktur kamu
-import logger from "../../src/logger";
+import { bot } from "./bot";
+import logger from "./logger";
 import {
   createNewAuthenticatedClient,
   saveUserData,
-} from "../../src/services/googleAuth";
-import { createSpreadsheet } from "../../src/services/googleSheet";
+} from "./services/googleAuth";
+import { createSpreadsheet } from "./services/googleSheet";
 
 const app = express();
 app.use(express.json());
 
-// healthcheck
+// Healthcheck: https://<domain>/api/ping
 app.get("/ping", (_req, res) => res.status(200).send("Pong! Server idup!"));
 
-// NOTE: sekarang callback OAuth di /api/oauth2callback
+// OAuth callback: https://<domain>/api/oauth2callback
 app.get("/oauth2callback", async (req, res) => {
   const { code, state } = req.query;
   const telegramId = state ? parseInt(state as string, 10) : null;
 
-  if (!code || !telegramId)
+  if (!code || !telegramId) {
     return res.status(400).send("Missing code or state");
+  }
 
   try {
     const { authClient, tokens } = await createNewAuthenticatedClient(
       code as string
     );
+
     const spreadsheetId = await createSpreadsheet(
       authClient,
       "Laporan Keuangan (Bot)"
     );
     if (!spreadsheetId) throw new Error("Gagal membuat spreadsheet");
 
+    // ambil email user & beri akses 'writer' ke sheet-nya
     const oauth2 = google.oauth2({ version: "v2", auth: authClient });
     const userInfo = await oauth2.userinfo.get();
     const userEmail = userInfo.data.email;
@@ -46,7 +50,7 @@ app.get("/oauth2callback", async (req, res) => {
         fileId: spreadsheetId,
         requestBody: { role: "writer", type: "user", emailAddress: userEmail },
       });
-      logger.info(`Akses editor diberikan ke ${userEmail}`);
+      logger.info({ userEmail }, "Akses editor diberikan");
     }
 
     await saveUserData(telegramId, { spreadsheetId, tokens });
@@ -67,7 +71,7 @@ app.get("/oauth2callback", async (req, res) => {
   }
 });
 
-// --- Telegram webhook
+// --- Telegram webhook setup
 const commands = [
   { command: "start", description: "Hubungkan akun atau lihat bantuan" },
   { command: "help", description: "Tampilkan menu bantuan" },
@@ -83,23 +87,37 @@ async function setupBot() {
   try {
     await bot.telegram.setMyCommands(commands);
 
-    // PENTING: SERVER_URL HARUS menyertakan '/api' (tanpa trailing slash)
-    // contoh: https://expenses-bot-rho.vercel.app/api
-    const base = process.env.SERVER_URL!;
+    // PENTING: SERVER_URL harus = https://<domain-vercel>/api  (tanpa slash di belakang)
+    const base = (process.env.SERVER_URL || "").replace(/\/$/, "");
     const webhookUrl = `${base}${secretPath}`;
-    await bot.telegram.setWebhook(webhookUrl);
 
+    await bot.telegram.setWebhook(webhookUrl);
     const me = await bot.telegram.getMe();
-    logger.info(`Webhook di-set ke: ${webhookUrl}`);
+    logger.info({ webhookUrl }, "Webhook diset");
     logger.info(`Bot berjalan sebagai @${me.username}`);
   } catch (error) {
-    logger.error(error, "Gagal mengatur webhook atau mengambil info bot");
+    logger.error(error, "Gagal mengatur webhook/getMe");
   }
 }
 setupBot();
 
-// pasang handler webhook di path yang sama
+// Pasang handler webhook pada path rahasia
 app.use(secretPath, bot.webhookCallback(secretPath));
 
-// Vercel butuh default export of a handler
-export default app;
+/**
+ * Vercel entrypoint: jangan .listen(), cukup ekspor handler
+ */
+export default function handler(req: VercelRequest, res: VercelResponse) {
+  return (app as any)(req, res);
+}
+
+/**
+ * (Opsional) jalankan server lokal untuk dev non-Vercel:
+ *  npm run dev  → akan listen di port 3000
+ */
+if (!process.env.VERCEL && require.main === module) {
+  const port = process.env.PORT || 3000;
+  app.listen(port, () => {
+    logger.info(`Dev server listening on http://localhost:${port}`);
+  });
+}
