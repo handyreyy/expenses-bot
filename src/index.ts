@@ -9,6 +9,7 @@ import { bot } from "./bot";
 import logger from "./logger";
 import {
   createNewAuthenticatedClient,
+  getRedirectUri,
   saveUserData,
 } from "./services/googleAuth";
 import { createSpreadsheet } from "./services/googleSheet";
@@ -20,6 +21,16 @@ const api = express.Router();
 
 // Healthcheck
 api.get("/ping", (_req, res) => res.status(200).send("Pong! Server idup!"));
+
+api.get("/debug/oauth", (_req, res) => {
+  const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON || "{}");
+  res.json({
+    server_url: (process.env.SERVER_URL || "").replace(/\/$/, ""),
+    chosen_redirect: getRedirectUri(),
+    client_id: creds?.web?.client_id || null,
+    redirect_uris_in_env: creds?.web?.redirect_uris || [],
+  });
+});
 
 // OAuth callback
 api.get("/oauth2callback", async (req, res) => {
