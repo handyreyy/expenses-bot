@@ -1,3 +1,4 @@
+// src/bot.ts
 import { formatInTimeZone } from "date-fns-tz";
 import { Markup, Telegraf } from "telegraf";
 import logger from "./logger";
@@ -33,6 +34,11 @@ bot.use(async (ctx, next) => {
     );
   }
   await next();
+});
+
+// log error global telegraf (penting untuk melihat error Google API)
+bot.catch((err, ctx) => {
+  logger.error({ err: String(err), update: ctx.update }, "Telegraf error");
 });
 
 const startHelpRegex = /^(?:@\w+\s+)?\/(start|help)(?:@\w+)?\s*$/;
@@ -94,8 +100,14 @@ bot.hears(totalRegex, async (ctx) => {
       "id-ID"
     )}*`;
     await ctx.replyWithMarkdown(replyMessage);
-  } catch (error) {
-    logger.error({ user: ctx.from }, "Gagal mengambil total laporan");
+  } catch (error: any) {
+    logger.error(
+      {
+        user: ctx.from,
+        err: error?.response?.data ?? error?.message ?? String(error),
+      },
+      "Gagal mengambil total laporan"
+    );
     await ctx.reply("Maaf, terjadi kesalahan saat mengambil laporan.");
   }
 });
@@ -166,8 +178,14 @@ bot.hears(pemasukanRegex, async (ctx) => {
           "id-ID"
         )}*`
     );
-  } catch (error) {
-    logger.error({ user: ctx.from }, "Gagal mencatat pemasukan");
+  } catch (error: any) {
+    logger.error(
+      {
+        user: ctx.from,
+        err: error?.response?.data ?? error?.message ?? String(error),
+      },
+      "Gagal mencatat pemasukan"
+    );
     await ctx.reply("Terjadi kesalahan saat mencatat ke Google Sheet. 😞");
   }
 });
@@ -237,8 +255,14 @@ bot.hears(catatRegex, async (ctx) => {
       )}* sudah dicatat.\n\n` +
         `Sisa saldo Anda bulan ini: *Rp${balance.toLocaleString("id-ID")}*`
     );
-  } catch (error) {
-    logger.error({ user: ctx.from }, "Gagal mencatat pengeluaran");
+  } catch (error: any) {
+    logger.error(
+      {
+        user: ctx.from,
+        err: error?.response?.data ?? error?.message ?? String(error),
+      },
+      "Gagal mencatat pengeluaran"
+    );
     await ctx.reply("Terjadi kesalahan saat mencatat ke Google Sheet. 😞");
   }
 });

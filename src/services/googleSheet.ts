@@ -1,3 +1,4 @@
+// src/services/googleSheet.ts
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import logger from "../logger";
@@ -10,6 +11,15 @@ export interface TransactionRow {
   description: string;
 }
 
+function errMsg(e: any): string {
+  return (
+    e?.response?.data?.error?.message ||
+    e?.response?.data?.message ||
+    e?.message ||
+    String(e)
+  );
+}
+
 export async function createSpreadsheet(
   auth: OAuth2Client,
   title: string
@@ -17,13 +27,11 @@ export async function createSpreadsheet(
   const sheets = google.sheets({ version: "v4", auth });
   try {
     const spreadsheet = await sheets.spreadsheets.create({
-      requestBody: {
-        properties: { title },
-      },
+      requestBody: { properties: { title } },
     });
     return spreadsheet.data.spreadsheetId;
   } catch (err) {
-    logger.error(err, "Gagal membuat spreadsheet baru");
+    logger.error({ err: errMsg(err) }, "Gagal membuat spreadsheet baru");
     return null;
   }
 }
@@ -55,7 +63,14 @@ export async function appendTransaction(
       requestBody: { values },
     });
   } catch (error: any) {
-    if (error.message.includes("Unable to parse range")) {
+    const message = errMsg(error);
+    logger.error(
+      { err: message, spreadsheetId, sheetName, range, values },
+      "appendTransaction failed (first try)"
+    );
+
+    // Google sering meletakkan teks "Unable to parse range" di error.response.data.error.message
+    if (/Unable to parse range/i.test(message)) {
       logger.info(
         `Sheet "${sheetName}" tidak ditemukan, membuat sheet baru...`
       );
@@ -70,6 +85,7 @@ export async function appendTransaction(
       const newSheetId =
         addSheetResponse.data.replies?.[0]?.addSheet?.properties?.sheetId;
 
+      // tulis header
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${sheetName}!A1`,
@@ -79,7 +95,8 @@ export async function appendTransaction(
         },
       });
 
-      if (newSheetId) {
+      // set timezone + format kolom
+      if (newSheetId != null) {
         await sheets.spreadsheets.batchUpdate({
           spreadsheetId,
           requestBody: {
@@ -101,7 +118,8 @@ export async function appendTransaction(
                     userEnteredFormat: {
                       numberFormat: {
                         type: "DATE_TIME",
-                        pattern: "dd mmm yyyy, hh:mm:ss",
+                        // gunakan MMM (huruf besar) dan HH untuk 24 jam
+                        pattern: "dd MMM yyyy, HH:mm:ss",
                       },
                     },
                   },
@@ -127,6 +145,8 @@ export async function appendTransaction(
           },
         });
       }
+
+      // append ulang setelah sheet dibuat
       await sheets.spreadsheets.values.append({
         spreadsheetId,
         range,
@@ -134,6 +154,7 @@ export async function appendTransaction(
         requestBody: { values },
       });
     } else {
+      // error lain: lempar naik supaya handler di bot.ts kirim pesan user + muncul di log
       throw error;
     }
   }
@@ -169,12 +190,16 @@ export async function calculateBalance(
       }
     }
   } catch (error: any) {
-    if (error.message.includes("Unable to parse range")) {
+    const message = errMsg(error);
+    logger.error(
+      { err: message, spreadsheetId, sheetName, range },
+      "calculateBalance failed"
+    );
+    if (/Unable to parse range/i.test(message)) {
+      // sheet bulan ini belum ada
       return { totalIncome: 0, totalExpenses: 0, balance: 0 };
-    } else {
-      logger.error(error, "Gagal kalkulasi saldo");
-      throw error;
     }
+    throw error;
   }
   return { totalIncome, totalExpenses, balance: totalIncome - totalExpenses };
 }
