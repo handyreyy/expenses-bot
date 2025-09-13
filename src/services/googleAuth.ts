@@ -26,29 +26,26 @@ if (!credentials?.web) {
   process.exit(1);
 }
 
-const { client_secret, client_id, redirect_uris } = credentials.web as {
+const { client_secret, client_id } = credentials.web as {
   client_secret: string;
   client_id: string;
-  redirect_uris: string[];
 };
 
-function pickRedirectUri(): string {
-  const base = process.env.SERVER_URL || ""; // ex: https://.../api
-  const wanted = base ? `${base.replace(/\/$/, "")}/oauth2callback` : undefined;
-  const chosen =
-    (wanted && redirect_uris?.find((u) => u === wanted)) || redirect_uris?.[0];
-  if (!chosen) {
-    logger.fatal("FATAL: Tidak menemukan redirect_uri yang valid.");
+// === Redirect URI SELALU dari SERVER_URL (/api) ===
+export function getRedirectUri(): string {
+  const base = (process.env.SERVER_URL || "").replace(/\/$/, ""); // ex: https://.../api
+  if (!base) {
+    logger.fatal(
+      "FATAL: SERVER_URL belum di-set. Contoh: https://<domain>/api"
+    );
     process.exit(1);
   }
-  return chosen;
+  return `${base}/oauth2callback`;
 }
 
-const oauth2Client = new google.auth.OAuth2(
-  client_id,
-  client_secret,
-  pickRedirectUri()
-);
+function newOAuthClient(): OAuth2Client {
+  return new google.auth.OAuth2(client_id, client_secret, getRedirectUri());
+}
 
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
@@ -61,19 +58,15 @@ export async function createNewAuthenticatedClient(code: string): Promise<{
   authClient: OAuth2Client;
   tokens: any;
 }> {
-  const authClient = new google.auth.OAuth2(
-    client_id,
-    client_secret,
-    pickRedirectUri()
-  );
+  const authClient = newOAuthClient();
   const { tokens } = await authClient.getToken(code);
   authClient.setCredentials(tokens);
   return { authClient, tokens };
 }
 
 export function generateAuthUrl(telegramId: number): string {
-  (oauth2Client as any).redirectUri = pickRedirectUri();
-  return oauth2Client.generateAuthUrl({
+  const client = newOAuthClient(); // PENTING: jangan reuse instance lama
+  return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: SCOPES,
@@ -85,17 +78,18 @@ export async function saveUserData(
   telegramId: number,
   data: { spreadsheetId: string; tokens: any }
 ) {
-  const userRef = db.collection("users").doc(String(telegramId));
-  await userRef.set(data, { merge: true });
+  await db
+    .collection("users")
+    .doc(String(telegramId))
+    .set(data, { merge: true });
 }
 
 export async function getUserData(
   telegramId: number
 ): Promise<{ spreadsheetId: string; tokens: any } | null> {
-  const userRef = db.collection("users").doc(String(telegramId));
-  const docSnap = await userRef.get();
-  return docSnap.exists
-    ? (docSnap.data() as { spreadsheetId: string; tokens: any })
+  const snap = await db.collection("users").doc(String(telegramId)).get();
+  return snap.exists
+    ? (snap.data() as { spreadsheetId: string; tokens: any })
     : null;
 }
 
@@ -104,16 +98,11 @@ export async function getAuthenticatedClient(
 ): Promise<OAuth2Client | null> {
   const userData = await getUserData(telegramId);
   if (!userData?.tokens) return null;
-  const client = new google.auth.OAuth2(
-    client_id,
-    client_secret,
-    pickRedirectUri()
-  );
+  const client = newOAuthClient();
   client.setCredentials(userData.tokens);
   return client;
 }
 
-// Tambahan: util untuk reset otentikasi user
 export async function clearUserData(telegramId: number) {
   await db.collection("users").doc(String(telegramId)).delete();
 }
