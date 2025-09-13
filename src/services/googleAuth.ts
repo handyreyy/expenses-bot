@@ -5,11 +5,11 @@ import { google } from "googleapis";
 import logger from "../logger";
 
 if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-  logger.fatal("FATAL: 'FIREBASE_SERVICE_ACCOUNT_JSON' tidak ditemukan.");
+  logger.fatal("FATAL: FIREBASE_SERVICE_ACCOUNT_JSON tidak ditemukan.");
   process.exit(1);
 }
 if (!process.env.GOOGLE_CREDENTIALS_JSON) {
-  logger.fatal("FATAL: 'GOOGLE_CREDENTIALS_JSON' tidak ditemukan.");
+  logger.fatal("FATAL: GOOGLE_CREDENTIALS_JSON tidak ditemukan.");
   process.exit(1);
 }
 
@@ -33,7 +33,7 @@ const { client_secret, client_id, redirect_uris } = credentials.web as {
 };
 
 function pickRedirectUri(): string {
-  const base = process.env.SERVER_URL || ""; // ex: https://…/api
+  const base = process.env.SERVER_URL || ""; // ex: https://.../api
   const wanted = base ? `${base.replace(/\/$/, "")}/oauth2callback` : undefined;
   const chosen =
     (wanted && redirect_uris?.find((u) => u === wanted)) || redirect_uris?.[0];
@@ -81,19 +81,12 @@ export function generateAuthUrl(telegramId: number): string {
   });
 }
 
-export async function getTokensFromCode(code: string): Promise<any> {
-  (oauth2Client as any).redirectUri = pickRedirectUri();
-  const { tokens } = await oauth2Client.getToken(code);
-  return tokens;
-}
-
 export async function saveUserData(
   telegramId: number,
   data: { spreadsheetId: string; tokens: any }
 ) {
   const userRef = db.collection("users").doc(String(telegramId));
   await userRef.set(data, { merge: true });
-  logger.info({ user_id: telegramId }, "User data saved to Firestore.");
 }
 
 export async function getUserData(
@@ -111,7 +104,6 @@ export async function getAuthenticatedClient(
 ): Promise<OAuth2Client | null> {
   const userData = await getUserData(telegramId);
   if (!userData?.tokens) return null;
-
   const client = new google.auth.OAuth2(
     client_id,
     client_secret,
@@ -119,4 +111,9 @@ export async function getAuthenticatedClient(
   );
   client.setCredentials(userData.tokens);
   return client;
+}
+
+// Tambahan: util untuk reset otentikasi user
+export async function clearUserData(telegramId: number) {
+  await db.collection("users").doc(String(telegramId)).delete();
 }

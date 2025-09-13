@@ -69,12 +69,7 @@ export async function appendTransaction(
       "appendTransaction failed (first try)"
     );
 
-    // Google sering meletakkan teks "Unable to parse range" di error.response.data.error.message
     if (/Unable to parse range/i.test(message)) {
-      logger.info(
-        `Sheet "${sheetName}" tidak ditemukan, membuat sheet baru...`
-      );
-
       const addSheetResponse = await sheets.spreadsheets.batchUpdate({
         spreadsheetId,
         requestBody: {
@@ -85,7 +80,6 @@ export async function appendTransaction(
       const newSheetId =
         addSheetResponse.data.replies?.[0]?.addSheet?.properties?.sheetId;
 
-      // tulis header
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${sheetName}!A1`,
@@ -95,7 +89,6 @@ export async function appendTransaction(
         },
       });
 
-      // set timezone + format kolom
       if (newSheetId != null) {
         await sheets.spreadsheets.batchUpdate({
           spreadsheetId,
@@ -118,7 +111,6 @@ export async function appendTransaction(
                     userEnteredFormat: {
                       numberFormat: {
                         type: "DATE_TIME",
-                        // gunakan MMM (huruf besar) dan HH untuk 24 jam
                         pattern: "dd MMM yyyy, HH:mm:ss",
                       },
                     },
@@ -146,7 +138,6 @@ export async function appendTransaction(
         });
       }
 
-      // append ulang setelah sheet dibuat
       await sheets.spreadsheets.values.append({
         spreadsheetId,
         range,
@@ -154,7 +145,6 @@ export async function appendTransaction(
         requestBody: { values },
       });
     } else {
-      // error lain: lempar naik supaya handler di bot.ts kirim pesan user + muncul di log
       throw error;
     }
   }
@@ -196,7 +186,6 @@ export async function calculateBalance(
       "calculateBalance failed"
     );
     if (/Unable to parse range/i.test(message)) {
-      // sheet bulan ini belum ada
       return { totalIncome: 0, totalExpenses: 0, balance: 0 };
     }
     throw error;

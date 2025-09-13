@@ -3,6 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { Markup, Telegraf } from "telegraf";
 import logger from "./logger";
 import {
+  clearUserData,
   generateAuthUrl,
   getAuthenticatedClient,
   getUserData,
@@ -36,7 +37,6 @@ bot.use(async (ctx, next) => {
   await next();
 });
 
-// log error global telegraf (penting untuk melihat error Google API)
 bot.catch((err, ctx) => {
   logger.error({ err: String(err), update: ctx.update }, "Telegraf error");
 });
@@ -46,6 +46,17 @@ const totalRegex = /^(?:@\w+\s+)?\/total(?:@\w+)?\s*$/;
 const laporanRegex = /^(?:@\w+\s+)?\/laporan(?:@\w+)?\s*$/;
 const pemasukanRegex = /^(?:@\w+\s+)?\/pemasukan(?:@\w+)?\s*(.*)/s;
 const catatRegex = /^(?:@\w+\s+)?\/catat(?:@\w+)?\s*(.*)/s;
+const relinkRegex = /^(?:@\w+\s+)?\/relink(?:@\w+)?\s*$/; // untuk reset auth cepat
+
+bot.hears(relinkRegex, async (ctx) => {
+  const id = ctx.from!.id;
+  await clearUserData(id);
+  const url = generateAuthUrl(id);
+  await ctx.reply(
+    "🔁 Silakan hubungkan ulang akun Google Anda.",
+    Markup.inlineKeyboard([Markup.button.url("🔗 Hubungkan Akun Google", url)])
+  );
+});
 
 bot.hears(startHelpRegex, async (ctx) => {
   const telegramId = ctx.from!.id;
@@ -67,6 +78,7 @@ bot.hears(startHelpRegex, async (ctx) => {
     );
   } else {
     const authUrl = generateAuthUrl(telegramId);
+    logger.info({ authUrl }, "Generated OAuth URL");
     await ctx.reply(
       "Selamat datang! Untuk memulai, hubungkan akun Google Anda.",
       Markup.inlineKeyboard([
@@ -101,14 +113,17 @@ bot.hears(totalRegex, async (ctx) => {
     )}*`;
     await ctx.replyWithMarkdown(replyMessage);
   } catch (error: any) {
+    const detail =
+      error?.response?.data?.error?.message ||
+      error?.message ||
+      "Unknown error";
     logger.error(
-      {
-        user: ctx.from,
-        err: error?.response?.data ?? error?.message ?? String(error),
-      },
+      { user: ctx.from, err: error?.response?.data ?? detail },
       "Gagal mengambil total laporan"
     );
-    await ctx.reply("Maaf, terjadi kesalahan saat mengambil laporan.");
+    await ctx.reply(
+      `Maaf, terjadi kesalahan saat mengambil laporan.\n\nDetail: \`${detail}\``
+    );
   }
 });
 
@@ -140,14 +155,12 @@ bot.hears(pemasukanRegex, async (ctx) => {
   }
 
   const match = text.match(/^([\d.,krbiru\s]+)\s*(.*)$/s);
-
   if (!match) {
     return ctx.reply("❓ Format salah. Gunakan: /pemasukan <jumlah> [sumber]");
   }
 
   const [, amountStr, description] = match;
   const amount = parseAmount(amountStr);
-
   if (isNaN(amount)) {
     return ctx.reply(`❓ Jumlah "${amountStr}" tidak valid.`);
   }
@@ -173,20 +186,22 @@ bot.hears(pemasukanRegex, async (ctx) => {
     await ctx.replyWithMarkdown(
       `✅ Berhasil! Pemasukan sebesar *Rp${amount.toLocaleString(
         "id-ID"
-      )}* sudah dicatat.\n\n` +
-        `Total pemasukan Anda bulan ini: *Rp${totalIncome.toLocaleString(
-          "id-ID"
-        )}*`
+      )}* sudah dicatat.\n\nTotal pemasukan bulan ini: *Rp${totalIncome.toLocaleString(
+        "id-ID"
+      )}*`
     );
   } catch (error: any) {
+    const detail =
+      error?.response?.data?.error?.message ||
+      error?.message ||
+      "Unknown error";
     logger.error(
-      {
-        user: ctx.from,
-        err: error?.response?.data ?? error?.message ?? String(error),
-      },
+      { user: ctx.from, err: error?.response?.data ?? detail },
       "Gagal mencatat pemasukan"
     );
-    await ctx.reply("Terjadi kesalahan saat mencatat ke Google Sheet. 😞");
+    await ctx.reply(
+      `Terjadi kesalahan saat mencatat ke Google Sheet. 😞\n\nDetail: \`${detail}\``
+    );
   }
 });
 
@@ -205,7 +220,6 @@ bot.hears(catatRegex, async (ctx) => {
   }
 
   const match = text.match(/^(\w+)\s+([\d.,krbiru\s]+)\s*(.*)$/s);
-
   if (!match) {
     return ctx.reply(
       "❓ Format salah. Gunakan: /catat <kategori> <jumlah> [deskripsi]"
@@ -214,7 +228,6 @@ bot.hears(catatRegex, async (ctx) => {
 
   const [, category, amountStr, description] = match;
   const amount = parseAmount(amountStr);
-
   if (isNaN(amount)) {
     return ctx.reply(`❓ Jumlah "${amountStr}" tidak valid.`);
   }
@@ -224,7 +237,6 @@ bot.hears(catatRegex, async (ctx) => {
       authClient,
       userData.spreadsheetId
     );
-
     if (totalIncome <= 0) {
       return ctx.replyWithMarkdown(
         "⛔️ Anda belum memiliki pemasukan bulan ini.\n\n" +
@@ -250,20 +262,24 @@ bot.hears(catatRegex, async (ctx) => {
       userData.spreadsheetId
     );
     await ctx.replyWithMarkdown(
-      `✅ Berhasil! Pengeluaran untuk kategori *${category}* sebesar *Rp${amount.toLocaleString(
+      `✅ Berhasil! Pengeluaran *${category}* sebesar *Rp${amount.toLocaleString(
         "id-ID"
-      )}* sudah dicatat.\n\n` +
-        `Sisa saldo Anda bulan ini: *Rp${balance.toLocaleString("id-ID")}*`
+      )}* sudah dicatat.\n\nSisa saldo bulan ini: *Rp${balance.toLocaleString(
+        "id-ID"
+      )}*`
     );
   } catch (error: any) {
+    const detail =
+      error?.response?.data?.error?.message ||
+      error?.message ||
+      "Unknown error";
     logger.error(
-      {
-        user: ctx.from,
-        err: error?.response?.data ?? error?.message ?? String(error),
-      },
+      { user: ctx.from, err: error?.response?.data ?? detail },
       "Gagal mencatat pengeluaran"
     );
-    await ctx.reply("Terjadi kesalahan saat mencatat ke Google Sheet. 😞");
+    await ctx.reply(
+      `Terjadi kesalahan saat mencatat ke Google Sheet. 😞\n\nDetail: \`${detail}\``
+    );
   }
 });
 
