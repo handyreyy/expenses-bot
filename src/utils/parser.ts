@@ -1,31 +1,36 @@
+// src/utils/parser.ts
 /**
- * Mengubah string angka yang fleksibel (misal: "15rb", "20k", "100.000") menjadi angka.
- * @param amountStr String angka yang akan di-parse.
- * @returns Angka dalam format number, atau NaN jika tidak valid.
+ * parseAmount menerima format ID:
+ * "15rb", "15 rb", "15k", "15.000", "15,5rb", "5jt", "2 juta", juga minus.
+ * Hasil dalam rupiah (integer).
  */
-export function parseAmount(amountStr: string): number {
-  if (!amountStr) return NaN;
+export function parseAmount(raw: string): number {
+  if (!raw) return NaN;
+  let s = raw.toLowerCase().trim();
 
-  // Ubah ke huruf kecil dan hapus spasi, koma, atau titik ribuan
-  let cleanStr = amountStr.toLowerCase().replace(/[\s,.]/g, "");
+  // buang label mata uang & spasi ganda
+  s = s
+    .replace(/\b(rp|idr)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  let multiplier = 1;
+  // Ambil angka + (opsional) unit yang menempel/berjarak
+  // Contoh yang valid untuk grup:
+  //  "15", "15.000", "15,5", + opsional "rb|ribu|k|jt|juta"
+  const m = s.match(
+    /^([+-]?(?:\d{1,3}(?:[.\s]\d{3})*|\d+)(?:[.,]\d+)?)(?:\s*(juta|jt|ribu|rb|k))?$/i
+  );
+  if (!m) return NaN;
 
-  // Cek akhiran 'k' atau 'rb'/'ribu'
-  if (cleanStr.endsWith("k")) {
-    multiplier = 1000;
-    cleanStr = cleanStr.slice(0, -1);
-  } else if (cleanStr.endsWith("rb") || cleanStr.endsWith("ribu")) {
-    multiplier = 1000;
-    // Hapus akhiran 'rb' atau 'ribu'
-    cleanStr = cleanStr.replace(/rb|ribu$/, "");
-  }
+  let num = m[1].replace(/\./g, "").replace(/,/g, "."); // 15.250,75 -> 15250.75
+  const unit = (m[2] || "").toLowerCase();
 
-  const num = parseFloat(cleanStr);
+  let mult = 1;
+  if (unit === "juta" || unit === "jt") mult = 1_000_000;
+  else if (unit === "ribu" || unit === "rb" || unit === "k") mult = 1_000;
 
-  if (isNaN(num)) {
-    return NaN;
-  }
+  const value = Number(num);
+  if (Number.isNaN(value)) return NaN;
 
-  return num * multiplier;
+  return Math.round(value * mult);
 }
