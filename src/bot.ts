@@ -519,7 +519,7 @@ bot.hears(riwayatRegex, async (ctx) => {
     .join("\n");
 
   await ctx.replyWithMarkdown(
-    `🕘 *${rows.length} transaksi terakhir (${prettyLabel})*\n${lines}\n\nHapus: \`/hapus <id>\` atau \`/undo\` untuk hapus yang terakhir (bulan berjalan).`
+    `🕘 *${rows.length} transaksi terakhir (${prettyLabel})*\n${lines}\n\nCatatan: \`/hapus <id>\` atau \`/undo\` hanya untuk bulan yang berjalan.`
   );
 });
 
