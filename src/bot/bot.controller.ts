@@ -36,6 +36,22 @@ export class BotController {
     };
   }
 
+  @Get('set-webhook')
+  async setWebhook(@Res() res: Response) {
+    const serverUrl = this.configService.get<string>('SERVER_URL');
+    if (!serverUrl) {
+      return res.status(500).send('SERVER_URL belum diset di Environment Variables.');
+    }
+    const webhookUrl = `${serverUrl.replace(/\/$/, '')}/webhook`;
+    
+    try {
+      await this.bot.telegram.setWebhook(webhookUrl);
+      return res.send(`webhook setup ok: ${webhookUrl}`);
+    } catch (e: any) {
+      return res.status(500).send(`Gagal set webhook: ${e.message}`);
+    }
+  }
+
   @Get('oauth2callback')
   async oauthCallback(
     @Query('code') code: string,

@@ -14,12 +14,8 @@ import { GoogleModule } from './google/google.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         token: configService.get<string>('BOT_TOKEN')!,
-        launchOptions: {
-          webhook: {
-            domain: configService.get<string>('SERVER_URL')!,
-            hookPath: configService.get<string>('WEBHOOK_PATH') || '/webhook',
-          },
-        },
+        // launchOptions removed to prevent conflict with manual WebhookController
+        // We will set webhook manually via /api/set-webhook endpoint
       }),
       inject: [ConfigService],
     }),
