@@ -9,7 +9,7 @@ import { GoogleAuthService } from '../google/google-auth.service';
 import { GoogleSheetService } from '../google/google-sheet.service';
 import { KEYBOARDS } from './bot.constants';
 
-@Controller('api')
+@Controller('')
 export class BotController {
   private readonly logger = new Logger(BotController.name);
 
@@ -42,7 +42,16 @@ export class BotController {
     if (!serverUrl) {
       return res.status(500).send('SERVER_URL belum diset di Environment Variables.');
     }
-    const webhookUrl = `${serverUrl.replace(/\/$/, '')}/api/webhook`;
+    // Ensure proper URL construction (avoid double /api)
+    // If global prefix is 'api', we need to account for it manually if we build the string.
+    // However, if SERVER_URL is just the domain, we append /api/webhook.
+    // If SERVER_URL ends with /api, we handle that.
+    
+    let baseUrl = serverUrl.replace(/\/$/, ''); // remove trailing slash
+    if (baseUrl.endsWith('/api')) {
+        baseUrl = baseUrl.slice(0, -4); // remove /api suffix if present
+    }
+    const webhookUrl = `${baseUrl}/api/webhook`;
     
     try {
       await this.bot.telegram.setWebhook(webhookUrl);
