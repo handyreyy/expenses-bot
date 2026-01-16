@@ -17,9 +17,11 @@ export class WebhookController {
     console.log(`[Webhook] Received update: ${JSON.stringify(req.body).slice(0, 100)}...`);
 
     try {
-        await this.bot.handleUpdate(req.body, res);
+        // Do NOT pass res to handleUpdate.
+        // This forces Telegraf to use standard API calls for replies,
+        // and gives us full control to send 200 OK explicitly.
+        await this.bot.handleUpdate(req.body);
         
-        // Ensure response is sent if telegraf didn't send it
         if (!res.headersSent) {
             res.status(200).send('OK');
         }
