@@ -42,7 +42,7 @@ export class BotController {
     if (!serverUrl) {
       return res.status(500).send('SERVER_URL belum diset di Environment Variables.');
     }
-    const webhookUrl = `${serverUrl.replace(/\/$/, '')}/webhook`;
+    const webhookUrl = `${serverUrl.replace(/\/$/, '')}/api/webhook`;
     
     try {
       await this.bot.telegram.setWebhook(webhookUrl);
