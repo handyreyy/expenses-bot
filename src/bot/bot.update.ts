@@ -8,6 +8,7 @@ import {
   examples,
   helpMessageAuthed
 } from '../constants/helpers';
+import { GeminiService } from '../gemini/gemini.service';
 import { GoogleAuthService } from '../google/google-auth.service';
 import { GoogleSheetService, TransactionRow } from '../google/google-sheet.service';
 import { KEYBOARDS, REGEX } from './bot.constants';
@@ -42,6 +43,7 @@ export class BotUpdate {
   constructor(
     private readonly googleAuthService: GoogleAuthService,
     private readonly googleSheetService: GoogleSheetService,
+    private readonly geminiService: GeminiService,
   ) {}
 
   @Hears(REGEX.relink)
@@ -204,6 +206,37 @@ export class BotUpdate {
     }
 
     const raw = ctx.match[1].trim();
+    
+    // Try AI First if available
+    const aiParsed = await this.geminiService.parseTransaction(raw, new Date(), { forceType: 'Pemasukan' });
+    if (aiParsed) {
+         try {
+             // ... duplicate saving logic, but let's reuse a helper function ideally.
+             // For now, I will inline it to be safe and clear.
+            const id = await this.googleSheetService.appendTransaction(
+                authClient,
+                userData.spreadsheetId,
+                { ...aiParsed, timestamp: aiParsed.date, type: 'Pemasukan' } 
+            );
+            const { balance } = await this.googleSheetService.calculateBalance(
+                authClient,
+                userData.spreadsheetId
+            );
+            await ctx.replyWithMarkdown(
+                `✅ *Pemasukan Tercatat!* ✨\n\n` +
+                `💰 *${aiParsed.category}*: Rp${aiParsed.amount.toLocaleString('id-ID')}\n` +
+                `📅 ${aiParsed.date}\n` +
+                `📝 ${aiParsed.description}\n` +
+                `ID: \`${String(id)}\`\n\n` +
+                `Sisa Saldo: *Rp${balance.toLocaleString('id-ID')}*`
+            );
+            return;
+         } catch(e) {
+             this.logger.warn('AI Parsing failed in command, falling back to regex', e);
+         }
+    }
+    
+    // Fallback to Regex
     const { timestamp, rest } = parseDateAtBeginning(raw);
 
     if (!rest) {
@@ -289,6 +322,35 @@ export class BotUpdate {
     }
 
     const raw = ctx.match[1].trim();
+
+    // Try AI First if available
+    const aiParsed = await this.geminiService.parseTransaction(raw, new Date(), { forceType: 'Pengeluaran' });
+    if (aiParsed) {
+         try {
+            const id = await this.googleSheetService.appendTransaction(
+                authClient,
+                userData.spreadsheetId,
+                { ...aiParsed, timestamp: aiParsed.date, type: 'Pengeluaran' }
+            );
+            const { balance } = await this.googleSheetService.calculateBalance(
+                authClient,
+                userData.spreadsheetId
+            );
+            await ctx.replyWithMarkdown(
+                `✅ *Pengeluaran Tercatat!* ✨\n\n` +
+                `💸 *${aiParsed.category}*: Rp${aiParsed.amount.toLocaleString('id-ID')}\n` +
+                `📅 ${aiParsed.date}\n` +
+                `📝 ${aiParsed.description}\n` +
+                `ID: \`${String(id)}\`\n\n` +
+                `Sisa Saldo: *Rp${balance.toLocaleString('id-ID')}*`
+            );
+            return;
+         } catch(e) {
+             this.logger.warn('AI Parsing failed in command, falling back to regex', e);
+         }
+    }
+
+    // Fallback to Regex
     const { timestamp, rest } = parseDateAtBeginning(raw);
 
     if (!rest) {
@@ -551,15 +613,81 @@ export class BotUpdate {
         }, 'Pesan diterima');
      }
      
-     // Fallback if not matched by Hears
      const id = ctx.from!.id;
-     const data = await this.googleAuthService.getUserData(id);
-     if (data) {
-         await ctx.replyWithMarkdown(helpMessageAuthed, KEYBOARDS.authed);
+     const userData = await this.googleAuthService.getUserData(id);
+
+     // If not auth, asking to login
+     if (!userData) {
+         const authUrl = this.googleAuthService.generateAuthUrl(id);
+         await ctx.replyWithMarkdown(helpMessageNew(authUrl), KEYBOARDS.new(authUrl));
          return;
      } 
-     const authUrl = this.googleAuthService.generateAuthUrl(id);
-     await ctx.replyWithMarkdown(helpMessageNew(authUrl), KEYBOARDS.new(authUrl));
+
+     // If auth, try to parse with AI
+     const message = ctx.message;
+     const text = message && 'text' in message ? (message as any).text : '';
+     if (!text) return;
+
+     // Feedback that we are processing
+     const processingMsg = await ctx.reply('🤖 Mencerna kalimat Anda...');
+
+     const parsed = await this.geminiService.parseTransaction(text);
+     
+     if (!parsed) {
+        // AI failed or disabled
+        await ctx.telegram.editMessageText(
+            ctx.chat!.id, 
+            processingMsg.message_id, 
+            undefined, 
+            'Maaf, saya tidak mengerti maksud Anda. Coba gunakan format manual atau pastikan kalimat lebih jelas.'
+        );
+        return;
+     }
+
+     // Save to sheet
+     const authClient = await this.googleAuthService.getAuthenticatedClient(id);
+     if (!authClient) {
+         await ctx.reply('Sesi habis. Silakan login ulang.');
+         return;
+     }
+
+     const txnData: TransactionRow = {
+         timestamp: parsed.date,
+         type: parsed.type,
+         category: parsed.category,
+         amount: parsed.amount,
+         description: parsed.description
+     };
+
+     try {
+         const txnId = await this.googleSheetService.appendTransaction(
+             authClient,
+             userData.spreadsheetId,
+             txnData
+         );
+
+         // Recalc balance
+         const { balance } = await this.googleSheetService.calculateBalance(
+            authClient, 
+            userData.spreadsheetId
+         );
+
+         await ctx.telegram.editMessageText(
+            ctx.chat!.id,
+            processingMsg.message_id,
+            undefined,
+            `✅ *Otomatis Tercatat!* ✨\n\n` +
+            `${parsed.type === 'Pemasukan' ? '💰' : '💸'} *${parsed.category}*: Rp${parsed.amount.toLocaleString('id-ID')}\n` +
+            `📅 ${parsed.date}\n` +
+            `📝 ${parsed.description}\n` +
+            `ID: \`${txnId}\`\n\n` +
+            `Sisa Saldo: *Rp${balance.toLocaleString('id-ID')}*`,
+            { parse_mode: 'Markdown' }
+         );
+
+     } catch (e: any) {
+         this.handleError(ctx, e, 'Gagal menyimpan transaksi AI');
+     }
   }
 
   // Helper

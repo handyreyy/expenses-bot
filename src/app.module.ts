@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { BotModule } from './bot/bot.module';
 import { RequestLoggerMiddleware } from './common/middleware/logging.middleware';
+import { GeminiModule } from './gemini/gemini.module';
 import { GoogleModule } from './google/google.module';
 
 @Module({
@@ -14,13 +15,15 @@ import { GoogleModule } from './google/google.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         token: configService.get<string>('BOT_TOKEN')!,
-        // Disable auto-launch to prevent polling/timeout in serverless environment
-        launchOptions: false as any,
+        // Local: auto-launch (undefined) -> Long Polling
+        // Production (Vercel): false -> Webhook (Serverless)
+        launchOptions: process.env.NODE_ENV === 'production' ? false : undefined,
       }),
       inject: [ConfigService],
     }),
     BotModule,
     GoogleModule,
+    GeminiModule,
   ],
   controllers: [],
   providers: [],

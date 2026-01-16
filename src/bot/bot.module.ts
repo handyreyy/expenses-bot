@@ -4,8 +4,10 @@ import { BotController } from './bot.controller';
 import { BotUpdate } from './bot.update';
 import { WebhookController } from './webhook.controller';
 
+import { GeminiModule } from '../gemini/gemini.module';
+
 @Module({
-  imports: [GoogleModule],
+  imports: [GoogleModule, GeminiModule],
   providers: [BotUpdate],
   controllers: [BotController, WebhookController],
 })
