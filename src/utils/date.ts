@@ -164,6 +164,7 @@ export function formatSheetTimestampForDisplay(v: unknown): string {
 
     const s = String(v ?? "").trim();
     if (!s) return "-";
+    if (typeof v === 'object') return JSON.stringify(v);
 
     // Jika string "yyyy-MM-dd HH:mm:ss" (atau tanpa waktu)
     const m = s.match(
