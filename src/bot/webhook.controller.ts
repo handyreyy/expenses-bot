@@ -13,19 +13,22 @@ export class WebhookController {
         return res.status(400).send('No body');
     }
     // Handle the update manually
+    // Log usage
+    console.log(`[Webhook] Received update: ${JSON.stringify(req.body).slice(0, 100)}...`);
+
     try {
         await this.bot.handleUpdate(req.body, res);
-        // Note: handleUpdate usually handles the response if response object is passed.
-        // If not, we might need to send 200 OK manually. 
-        // Telegraf docs say: if res is passed, it uses it.
         
+        // Ensure response is sent if telegraf didn't send it
         if (!res.headersSent) {
             res.status(200).send('OK');
         }
-    } catch (e) {
+    } catch (e: any) {
         console.error('Webhook handling error:', e);
+        // CRITICAL: Always return 200 to Telegram even on error, 
+        // otherwise it will retry infinitely and clog the queue.
         if (!res.headersSent) {
-             res.status(500).send('Error');
+             res.status(200).send('OK (Handled Error)');
         }
     }
   }
