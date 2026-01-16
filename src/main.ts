@@ -3,7 +3,6 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api');
   // Allow Vercel to handle the port
   const port = process.env.PORT || 3000;
   await app.listen(port);

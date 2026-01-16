@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import { InjectBot } from 'nestjs-telegraf';
 import { Context, Telegraf } from 'telegraf';
 
-@Controller('webhook')
+@Controller('api/webhook')
 export class WebhookController {
   constructor(@InjectBot() private readonly bot: Telegraf<Context>) {}
 

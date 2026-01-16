@@ -9,7 +9,7 @@ import { GoogleAuthService } from '../google/google-auth.service';
 import { GoogleSheetService } from '../google/google-sheet.service';
 import { KEYBOARDS } from './bot.constants';
 
-@Controller('')
+@Controller('api')
 export class BotController {
   private readonly logger = new Logger(BotController.name);
 
