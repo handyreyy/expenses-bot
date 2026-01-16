@@ -1,9 +1,9 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TelegrafModule } from 'nestjs-telegraf';
+import { AiModule } from './ai/ai.module';
 import { BotModule } from './bot/bot.module';
 import { RequestLoggerMiddleware } from './common/middleware/logging.middleware';
-import { GeminiModule } from './gemini/gemini.module';
 import { GoogleModule } from './google/google.module';
 
 @Module({
@@ -23,7 +23,7 @@ import { GoogleModule } from './google/google.module';
     }),
     BotModule,
     GoogleModule,
-    GeminiModule,
+    AiModule,
   ],
   controllers: [],
   providers: [],

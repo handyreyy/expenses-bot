@@ -2,13 +2,13 @@ import { Logger } from '@nestjs/common';
 import { formatInTimeZone } from 'date-fns-tz';
 import { Ctx, Hears, On, Update } from 'nestjs-telegraf';
 import { Context } from 'telegraf';
+import { AiService } from '../ai/ai.service';
 import {
   dateTips,
   deleteTips,
   examples,
   helpMessageAuthed
 } from '../constants/helpers';
-import { GeminiService } from '../gemini/gemini.service';
 import { GoogleAuthService } from '../google/google-auth.service';
 import { GoogleSheetService, TransactionRow } from '../google/google-sheet.service';
 import { KEYBOARDS, REGEX } from './bot.constants';
@@ -43,7 +43,7 @@ export class BotUpdate {
   constructor(
     private readonly googleAuthService: GoogleAuthService,
     private readonly googleSheetService: GoogleSheetService,
-    private readonly geminiService: GeminiService,
+    private readonly aiService: AiService,
   ) {}
 
   @Hears(REGEX.relink)
@@ -87,13 +87,16 @@ export class BotUpdate {
     }
 
     // Scenario 3: New user (No user data)
-    // "Halo! Selamat datang di Kubera..."
-    const msg = 
-      `👋 *Halo! Selamat datang di Kubera.*\n\n` +
-      `Kubera adalah bot yang membantu Anda untuk mencatat pemasukan dan pengeluaran harian, bulanan hingga tahunan.\n\n` +
-      `Silakan login dengan akun Google Anda untuk merasakan manfaatnya.`;
+    // AI Generated Welcome
+    const welcomePrompt = `
+        Greet a NEW user named "${ctx.from?.first_name || 'User'}". 
+        Welcome them to Kubera (Financial Bot).
+        Invite them to login using the provided button.
+        Keep it short, fun, and engaging.
+    `;
+    const aiMsg = await this.aiService.chat(welcomePrompt);
     
-    await ctx.replyWithMarkdown(msg, KEYBOARDS.new(authUrl));
+    await ctx.replyWithMarkdown(aiMsg, KEYBOARDS.new(authUrl));
   }
 
   @Hears(REGEX.total)
@@ -208,7 +211,7 @@ export class BotUpdate {
     const raw = ctx.match[1].trim();
     
     // Try AI First if available
-    const aiParsed = await this.geminiService.parseTransaction(raw, new Date(), { forceType: 'Pemasukan' });
+    const aiParsed = await this.aiService.parseTransaction(raw, new Date(), { forceType: 'Pemasukan' });
     if (aiParsed) {
          try {
              // ... duplicate saving logic, but let's reuse a helper function ideally.
@@ -324,7 +327,7 @@ export class BotUpdate {
     const raw = ctx.match[1].trim();
 
     // Try AI First if available
-    const aiParsed = await this.geminiService.parseTransaction(raw, new Date(), { forceType: 'Pengeluaran' });
+    const aiParsed = await this.aiService.parseTransaction(raw, new Date(), { forceType: 'Pengeluaran' });
     if (aiParsed) {
          try {
             const id = await this.googleSheetService.appendTransaction(
@@ -631,15 +634,17 @@ export class BotUpdate {
      // Feedback that we are processing
      const processingMsg = await ctx.reply('🤖 Mencerna kalimat Anda...');
 
-     const parsed = await this.geminiService.parseTransaction(text);
+     const parsed = await this.aiService.parseTransaction(text);
      
      if (!parsed) {
-        // AI failed or disabled
+        // Not a transaction, try Chit-Chat
+        const reply = await this.aiService.chat(text);
+        
         await ctx.telegram.editMessageText(
             ctx.chat!.id, 
             processingMsg.message_id, 
             undefined, 
-            'Maaf, saya tidak mengerti maksud Anda. Coba gunakan format manual atau pastikan kalimat lebih jelas.'
+            reply
         );
         return;
      }
